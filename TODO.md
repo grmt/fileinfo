@@ -1,5 +1,17 @@
 # TODO
 
+## Include collected roads and cities in a future release
+
+Keep city filters scoped to incidents that ANWB groups under that city name.
+Do not expand them to highway segments mentioning the city as an endpoint.
+
+Let the Toon collect more locations, then retrieve `knownRoads` from
+`/mnt/data/tsc/fileinfo.userSettings.json` on `toon`. Merge the collected names
+into the bundled starting catalog so new installations also get these choices.
+Include only location names, not the device's `roadFilter` or `filterEnabled`
+preferences. Preserve numeric sorting for A- and N-roads and alphabetical city
+sorting, bump the version, and publish a new release with the expanded catalog.
+
 ## Look into NDW open data (https://opendata.ndw.nu/)
 
 NDW (Nationaal Dataportaal Wegverkeer) publishes open traffic data feeds, no API key
