@@ -12,6 +12,18 @@ Include only location names, not the device's `roadFilter` or `filterEnabled`
 preferences. Preserve numeric sorting for A- and N-roads and alphabetical city
 sorting, bump the version, and publish a new release with the expanded catalog.
 
+## Support roadworks and speed checks from the ANWB feed
+
+The app currently reads only each segment's `jams` array. The ANWB feed also
+provides separate `roadworks` and `radars` arrays, which are currently ignored.
+
+Read and validate these arrays and preserve the incident category explicitly.
+Add independent type filters for files, werkzaamheden and flitsers, combined
+with the existing road/city selection. Show appropriate labels and icons in
+the incident list and tile; do not count roadworks or speed checks as jams.
+Keep the existing XML escaping, plain-text rendering and response validation.
+Verify category handling and combined filters against saved ANWB responses.
+
 ## Look into NDW open data (https://opendata.ndw.nu/)
 
 NDW (Nationaal Dataportaal Wegverkeer) publishes open traffic data feeds, no API key
