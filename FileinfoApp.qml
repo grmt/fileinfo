@@ -258,6 +258,17 @@ App {
 		return normalized;
 	}
 
+	function compareRoadNames(left, right) {
+		var leftRoad = /^([AN])([0-9]+)$/.exec(left);
+		var rightRoad = /^([AN])([0-9]+)$/.exec(right);
+		if (leftRoad && rightRoad && leftRoad[1] === rightRoad[1]) {
+			var difference = parseInt(leftRoad[2], 10) - parseInt(rightRoad[2], 10);
+			if (difference) return difference;
+		}
+		if (!!leftRoad !== !!rightRoad) return leftRoad ? -1 : 1;
+		return left < right ? -1 : (left > right ? 1 : 0);
+	}
+
 	// Keep defaults, saved selections and everything ever supplied by ANWB.
 	function rememberRoads(roadNames) {
 		var candidates = defaultRoadArray.concat(fileinfoAvailableRoads,
@@ -271,7 +282,7 @@ App {
 			seen["$" + name] = true;
 			known.push(name);
 		}
-		known.sort();
+		known.sort(compareRoadNames);
 		if (JSON.stringify(known) === JSON.stringify(fileinfoAvailableRoads)) return false;
 		fileinfoAvailableRoads = known;
 		return true;

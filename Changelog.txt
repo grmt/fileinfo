@@ -1,3 +1,6 @@
+2.0.16
+- sort A- and N-roads numerically in the filter; keep cities alphabetical
+
 2.0.15
 - keep known roads and cities in persistent settings, including existing selections
 - added a separate cities filter page and vertically scrollable filter grids
