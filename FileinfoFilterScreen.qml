@@ -16,6 +16,11 @@ Screen {
 		"Alle\nN-wegen"
 	]
 
+	// index 0 = A-wegen page, 1 = N-wegen page
+	property int currentPage: 0
+	property variant aRoadsArray: []
+	property variant nRoadsArray: []
+
 	function effectiveRoadArray() {
 		if (app.fileinfoAvailableRoads && app.fileinfoAvailableRoads.length > 0) {
 			return app.fileinfoAvailableRoads;
@@ -23,48 +28,98 @@ Screen {
 		return defaultRoadArray;
 	}
 
-	screenTitle: qsTr("Filter")
-	isSaveCancelDialog: true
+	// Splits the combined road list into an A-wegen and an N-wegen array. Kept as
+	// two separate pages (rather than one long grid) because on-screen the combined
+	// list has too many columns to fit the display width - entries beyond the visible
+	// columns became unreachable, and the fixed Clear button could land on top of a
+	// road button.
+	function splitRoads(roadArray) {
+		var a = [];
+		var n = [];
+		for (var i = 0; i < roadArray.length; i++) {
+			var roadName = roadArray[i];
+			if (roadName === "Alle\nN-wegen") continue;
+			if (roadName.charAt(0) === "N") {
+				n.push(roadName);
+			} else {
+				a.push(roadName);
+			}
+		}
+		n.push("Alle\nN-wegen");
+		return {a: a, n: n};
+	}
 
-	onShown: {
-		// Get the correct button indices to set selected state on
-
-		var roadArray = effectiveRoadArray();
+	function restoreSelection(roadArray, group) {
 		var myFilter = app.fileinfoFilterArray;
 		var filterArr = myFilter.split(",");
 		var selectedIndexArr = [];
 
 		for (var i = 0; i < filterArr.length; i++) {
+			var index;
 			if (filterArr[i] == "N") {
-				var index = roadArray.indexOf("Alle\nN-wegen");
+				index = roadArray.indexOf("Alle\nN-wegen");
 			}
 			else {
-				var index = roadArray.indexOf(filterArr[i]);
+				index = roadArray.indexOf(filterArr[i]);
 			}
 			if (index != -1) {
 				selectedIndexArr.push(index);
 			}
 		}
 
-		// Set selected state of buttons
-		fileinfoFilterGroup.clearSelectedControls();
+		group.clearSelectedControls();
 		if (selectedIndexArr.length > 0) {
-			fileinfoFilterGroup.setSelectedControls(selectedIndexArr);
+			group.setSelectedControls(selectedIndexArr);
 		}
 	}
 
-	onSaved: {
-		// Create array string of roads
-		var roadArray = effectiveRoadArray();
-		var selectedIndexArr = fileinfoFilterGroup.getSelectedControls();
-		var filterArr = [];
-
+	function selectedRoadNames(roadArray, group) {
+		var selectedIndexArr = group.getSelectedControls();
+		var names = [];
 		for (var i = 0; i < selectedIndexArr.length; i++) {
 			var roadName = roadArray[selectedIndexArr[i]];
 			if (roadName === "Alle\nN-wegen")
 				roadName = "N"; // Driver expects N instead of "Alle\nN-wegen"
-			filterArr.push(roadName);
+			names.push(roadName);
 		}
+		return names;
+	}
+
+	function updatePageHeader() {
+		pageTitle.text = currentPage === 0 ? qsTr("A-wegen") : qsTr("N-wegen");
+		fileinfoFilterGridViewA.visible = currentPage === 0;
+		fileinfoFilterGridViewN.visible = currentPage === 1;
+		leftArrow.enabled = currentPage > 0;
+		rightArrow.enabled = currentPage < 1;
+	}
+
+	screenTitle: qsTr("Filter")
+	isSaveCancelDialog: true
+
+	onShown: {
+		var split = splitRoads(effectiveRoadArray());
+		aRoadsArray = split.a;
+		nRoadsArray = split.n;
+
+		fileinfoFilterModelA.clear();
+		for (var i = 0; i < aRoadsArray.length; i++) {
+			fileinfoFilterModelA.append({roadName: aRoadsArray[i]});
+		}
+		fileinfoFilterModelN.clear();
+		for (var j = 0; j < nRoadsArray.length; j++) {
+			fileinfoFilterModelN.append({roadName: nRoadsArray[j]});
+		}
+
+		restoreSelection(aRoadsArray, fileinfoFilterGroupA);
+		restoreSelection(nRoadsArray, fileinfoFilterGroupN);
+
+		currentPage = 0;
+		updatePageHeader();
+	}
+
+	onSaved: {
+		var filterArr = selectedRoadNames(aRoadsArray, fileinfoFilterGroupA).concat(
+			selectedRoadNames(nRoadsArray, fileinfoFilterGroupN));
 		var myFilterStr = filterArr.toString();
 		app.fileinfoFilterArray = myFilterStr;
 		app.saveSettings();
@@ -72,15 +127,66 @@ Screen {
 	}
 
 	ControlGroup {
-		id: fileinfoFilterGroup
+		id: fileinfoFilterGroupA
 		exclusive: false
 	}
 
-	GridView {
-		id: fileinfoFilterGridView
+	ControlGroup {
+		id: fileinfoFilterGroupN
+		exclusive: false
+	}
 
-		model: fileinfoFilterModel
-		delegate: FileinfoFilterDelegate {}
+	Item {
+		id: pageHeader
+		height: isNxt ? 40 : 32
+		anchors {
+			top: parent.top
+			topMargin: isNxt ? 8 : 6
+			left: parent.left
+			leftMargin: isNxt ? 58 : 46
+			right: parent.right
+			rightMargin: isNxt ? 58 : 46
+		}
+
+		IconButton {
+			id: leftArrow
+			anchors.left: parent.left
+			anchors.verticalCenter: parent.verticalCenter
+			iconSource: "qrc:/tsc/navArrow-left.png"
+			onClicked: {
+				if (currentPage > 0) {
+					currentPage = currentPage - 1;
+					updatePageHeader();
+				}
+			}
+		}
+
+		Text {
+			id: pageTitle
+			anchors.centerIn: parent
+			font.family: qfont.semiBold.name
+			font.pixelSize: isNxt ? 22 : 18
+		}
+
+		IconButton {
+			id: rightArrow
+			anchors.right: parent.right
+			anchors.verticalCenter: parent.verticalCenter
+			iconSource: "qrc:/tsc/navArrow-right.png"
+			onClicked: {
+				if (currentPage < 1) {
+					currentPage = currentPage + 1;
+					updatePageHeader();
+				}
+			}
+		}
+	}
+
+	GridView {
+		id: fileinfoFilterGridViewA
+
+		model: fileinfoFilterModelA
+		delegate: FileinfoFilterDelegate { targetControlGroup: fileinfoFilterGroupA }
 
 		flow: GridView.TopToBottom
 		cellWidth: isNxt ? 132 : 106
@@ -89,24 +195,45 @@ Screen {
 		flickableDirection: Flickable.VerticalFlick
 
 		anchors {
-			fill: parent
-			top: parent.top
+			top: pageHeader.bottom
+			bottom: parent.bottom
 			left: parent.left
-			topMargin: isNxt ? 51 : 41
+			right: parent.right
+			topMargin: isNxt ? 11 : 9
 			leftMargin: isNxt ? 58 : 46
+			rightMargin: (isNxt ? 132 : 106) + 12
+		}
+	}
+
+	GridView {
+		id: fileinfoFilterGridViewN
+
+		model: fileinfoFilterModelN
+		delegate: FileinfoFilterDelegate { targetControlGroup: fileinfoFilterGroupN }
+
+		flow: GridView.TopToBottom
+		cellWidth: isNxt ? 132 : 106
+		cellHeight: isNxt ? 75 : 60
+		interactive: true
+		flickableDirection: Flickable.VerticalFlick
+
+		anchors {
+			top: pageHeader.bottom
+			bottom: parent.bottom
+			left: parent.left
+			right: parent.right
+			topMargin: isNxt ? 11 : 9
+			leftMargin: isNxt ? 58 : 46
+			rightMargin: (isNxt ? 132 : 106) + 12
 		}
 	}
 
 	ListModel {
-		id: fileinfoFilterModel
+		id: fileinfoFilterModelA
+	}
 
-		// Load roads from array
-		Component.onCompleted: {
-			var roadArray = effectiveRoadArray();
-			for (var i = 0; i < roadArray.length; i++) {
-				append({roadName: roadArray[i]});
-			}
-		}
+	ListModel {
+		id: fileinfoFilterModelN
 	}
 
 	Rectangle {
@@ -134,7 +261,8 @@ Screen {
 			text: qsTr("Clear")
 
 			onPressed: {
-				fileinfoFilterGroup.clearSelectedControls();
+				fileinfoFilterGroupA.clearSelectedControls();
+				fileinfoFilterGroupN.clearSelectedControls();
 			}
 		}
 	}

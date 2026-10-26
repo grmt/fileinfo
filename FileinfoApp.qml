@@ -30,21 +30,41 @@ App {
 	property string fileinfoFilterArray
 	property variant fileinfoAvailableRoads: []
 
-	// Fileinfo data for Tile max 3 roads
+	// Fileinfo data for Tile max 5 roads
 	property string roadTile1Name
 	property int roadTile1NumberOfJams
 	property real roadTile1TotalLength
+	property int roadTile1TotalDelay
+	property bool roadTile1Roadworks
 	property bool roadTile1
 
 	property string roadTile2Name
 	property int roadTile2NumberOfJams
 	property real roadTile2TotalLength
+	property int roadTile2TotalDelay
+	property bool roadTile2Roadworks
 	property bool roadTile2
 
 	property string roadTile3Name
 	property int roadTile3NumberOfJams
 	property real roadTile3TotalLength
+	property int roadTile3TotalDelay
+	property bool roadTile3Roadworks
 	property bool roadTile3
+
+	property string roadTile4Name
+	property int roadTile4NumberOfJams
+	property real roadTile4TotalLength
+	property int roadTile4TotalDelay
+	property bool roadTile4Roadworks
+	property bool roadTile4
+
+	property string roadTile5Name
+	property int roadTile5NumberOfJams
+	property real roadTile5TotalLength
+	property int roadTile5TotalDelay
+	property bool roadTile5Roadworks
+	property bool roadTile5
 
 	property bool fileinfoDataRead: false
 	property url fileinfoApiUrl: "https://api.anwb.nl/routing/v1/incidents/incidents-desktop"
@@ -91,41 +111,27 @@ App {
 
 	}
 
-	function registerRoadTile(msgWegNr, length) {
-		if (roadTile2Name == "") {
-			roadTile2Name = msgWegNr;
-			roadTile2NumberOfJams = 1;
-			roadTile2TotalLength = length;
-			roadTile2 = true;
-			return;
-		}
-		if (roadTile2Name == msgWegNr) {
-			roadTile2NumberOfJams = roadTile2NumberOfJams + 1;
-			roadTile2TotalLength = Math.round((roadTile2TotalLength + length) * 100) / 100;
-			return;
-		}
-		if (roadTile1Name == "") {
-			roadTile1Name = msgWegNr;
-			roadTile1NumberOfJams = 1;
-			roadTile1TotalLength = length;
-			roadTile1 = true;
-			return;
-		}
-		if (roadTile1Name == msgWegNr) {
-			roadTile1NumberOfJams = roadTile1NumberOfJams + 1;
-			roadTile1TotalLength = Math.round((roadTile1TotalLength + length) * 100) / 100;
-			return;
-		}
-		if (roadTile3Name == "") {
-			roadTile3Name = msgWegNr;
-			roadTile3NumberOfJams = 1;
-			roadTile3TotalLength = length;
-			roadTile3 = true;
-			return;
-		}
-		if (roadTile3Name == msgWegNr) {
-			roadTile3NumberOfJams = roadTile3NumberOfJams + 1;
-			roadTile3TotalLength = Math.round((roadTile3TotalLength + length) * 100) / 100;
+	function registerRoadTile(msgWegNr, length, delay, roadworks) {
+		// A road with both a jam and roadworks gets two separate slots (one per type),
+		// since "N file(s)" and "N wegwerkzaamheden" shouldn't be merged into one count.
+		for (var i = 1; i <= 5; i++) {
+			var nameProp = "roadTile" + i + "Name";
+			var roadworksProp = "roadTile" + i + "Roadworks";
+			if (fileinfoApp[nameProp] == "") {
+				fileinfoApp[nameProp] = msgWegNr;
+				fileinfoApp["roadTile" + i + "NumberOfJams"] = 1;
+				fileinfoApp["roadTile" + i + "TotalLength"] = length;
+				fileinfoApp["roadTile" + i + "TotalDelay"] = delay;
+				fileinfoApp[roadworksProp] = roadworks;
+				fileinfoApp["roadTile" + i] = true;
+				return;
+			}
+			if (fileinfoApp[nameProp] == msgWegNr && fileinfoApp[roadworksProp] == roadworks) {
+				fileinfoApp["roadTile" + i + "NumberOfJams"] = fileinfoApp["roadTile" + i + "NumberOfJams"] + 1;
+				fileinfoApp["roadTile" + i + "TotalLength"] = Math.round((fileinfoApp["roadTile" + i + "TotalLength"] + length) * 100) / 100;
+				fileinfoApp["roadTile" + i + "TotalDelay"] = fileinfoApp["roadTile" + i + "TotalDelay"] + delay;
+				return;
+			}
 		}
 	}
 
@@ -142,8 +148,104 @@ App {
 		return description;
 	}
 
-	function jamXml(msgWegNr, jam, length, delay) {
-		return "<melding><wegnr>" + msgWegNr + "</wegnr><description>" + jamDescription(jam) + "</description><afstand>" + length + "</afstand><vertraging>" + delay + "</vertraging></melding>";
+	// "incidentType === road-closed" is not a reliable roadworks signal - roads also get
+	// closed for accidents, technical problems, border checks, over-height vehicles, etc.
+	// The reason text is the accurate source: it always spells out "Wegwerkzaamheden" for
+	// genuine roadworks, regardless of incidentType.
+	function isRoadworksJam(jam) {
+		return !!(jam["reason"] && jam["reason"].indexOf("erkzaamheden") !== -1);
+	}
+
+	function jamXml(msgWegNr, jam, length, delay, wegvak) {
+		var roadworks = isRoadworksJam(jam) ? "1" : "0";
+		return "<melding><wegnr>" + xmlText(msgWegNr) + "</wegnr><wegvak>" + xmlText(wegvak) + "</wegvak><roadworks>" + roadworks + "</roadworks><description>" + xmlText(jamDescription(jam)) + "</description><afstand>" + length + "</afstand><vertraging>" + delay + "</vertraging></melding>";
+	}
+
+	function xmlText(value) {
+		return String(value)
+			.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
+			.replace(/[\ud800-\udbff][\udc00-\udfff]|[\ud800-\udfff]/g, function(character) {
+				return character.length === 2 ? character : "\ufffd";
+			})
+			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+	}
+
+	// Validate and normalize the complete response before changing the displayed data.
+	function parseRoads(responseText) {
+		if (responseText.length > 4 * 1024 * 1024) {
+			throw new Error("Traffic response is too large");
+		}
+		var data = JSON.parse(responseText);
+		if (!data || typeof data !== "object" || Array.isArray(data)) {
+			throw new Error("Invalid traffic response");
+		}
+		var roads = data["roads"];
+		if (!Array.isArray(roads) && data["data"] && typeof data["data"] === "object") {
+			roads = data["data"]["roads"];
+		}
+		if (!Array.isArray(roads) || roads.length > 1024) {
+			throw new Error("Invalid roads array");
+		}
+
+		function text(value) {
+			if (value === undefined || value === null) return "";
+			if (typeof value !== "string" || value.length > 4096) {
+				throw new Error("Invalid traffic text");
+			}
+			return value;
+		}
+		function number(value) {
+			if (value === undefined || value === null || value === "") return 0;
+			if (typeof value !== "number" && typeof value !== "string") {
+				throw new Error("Invalid traffic number");
+			}
+			var result = Number(value);
+			if (!isFinite(result) || result < 0 || result > 2147483647) {
+				throw new Error("Invalid traffic number");
+			}
+			return Math.floor(result);
+		}
+
+		var normalized = [];
+		var segmentCount = 0;
+		var jamCount = 0;
+		for (var i = 0; i < roads.length; i++) {
+			var road = roads[i];
+			if (!road || typeof road !== "object" || Array.isArray(road)
+					|| typeof road["road"] !== "string" || !text(road["road"])) {
+				throw new Error("Invalid road");
+			}
+			var segments = road["segments"];
+			if (segments === undefined || segments === null) segments = [];
+			if (!Array.isArray(segments) || (segmentCount += segments.length) > 10000) {
+				throw new Error("Invalid segments array");
+			}
+			var normalizedSegments = [];
+			for (var j = 0; j < segments.length; j++) {
+				var segment = segments[j];
+				if (!segment || typeof segment !== "object" || Array.isArray(segment)) {
+					throw new Error("Invalid segment");
+				}
+				var jams = segment["jams"];
+				if (jams === undefined || jams === null) jams = [];
+				if (!Array.isArray(jams) || (jamCount += jams.length) > 10000) {
+					throw new Error("Invalid jams array");
+				}
+				var normalizedJams = [];
+				for (var k = 0; k < jams.length; k++) {
+					var jam = jams[k];
+					if (!jam || typeof jam !== "object" || Array.isArray(jam)) {
+						throw new Error("Invalid traffic incident");
+					}
+					normalizedJams.push({from: text(jam["from"]), to: text(jam["to"]),
+						reason: text(jam["reason"]), distance: number(jam["distance"]), delay: number(jam["delay"])});
+				}
+				normalizedSegments.push({start: text(segment["start"]), end: text(segment["end"]), jams: normalizedJams});
+			}
+			normalized.push({road: road["road"], segments: normalizedSegments});
+		}
+		return normalized;
 	}
 
 	function updateAvailableRoads(roads) {
@@ -178,33 +280,27 @@ App {
 		xmlhttp.onreadystatechange=function() {
 			if (xmlhttp.readyState == 4) {
 				if (xmlhttp.status != 200) {
+					fileinfoUpdated();
 					return;
 				}
 
-				var fileAnwbJSON;
+				var roads;
 				try {
-					fileAnwbJSON = JSON.parse(xmlhttp.responseText);
+					roads = parseRoads(xmlhttp.responseText);
 				} catch (parseError) {
+					fileinfoUpdated();
 					return;
 				}
-
-				fileinfoDataRead = true;
 
 					// clear Tile
-				roadTile1Name = "";
-				roadTile1NumberOfJams = 0;
-				roadTile1TotalLength = 0;
-				roadTile1 = false;
-
-				roadTile2Name = "";
-				roadTile2NumberOfJams = 0;
-				roadTile2TotalLength = 0;
-				roadTile2 = false;
-
-				roadTile3Name = "";
-				roadTile3NumberOfJams = 0;
-				roadTile3TotalLength = 0;
-				roadTile3 = false;
+				for (var t = 1; t <= 5; t++) {
+					fileinfoApp["roadTile" + t + "Name"] = "";
+					fileinfoApp["roadTile" + t + "NumberOfJams"] = 0;
+					fileinfoApp["roadTile" + t + "TotalLength"] = 0;
+					fileinfoApp["roadTile" + t + "TotalDelay"] = 0;
+					fileinfoApp["roadTile" + t + "Roadworks"] = false;
+					fileinfoApp["roadTile" + t] = false;
+				}
 
 					// create filtered and normal set of traffic jams
 
@@ -218,12 +314,6 @@ App {
 				fileinfoDataFiltered = "<meldingen>";
 				fileinfoDataAll = "<meldingen>";
 
-				var roads = [];
-				if (fileAnwbJSON["roads"] && fileAnwbJSON["roads"].length !== undefined) {
-					roads = fileAnwbJSON["roads"];
-				} else if (fileAnwbJSON["data"] && fileAnwbJSON["data"]["roads"] && fileAnwbJSON["data"]["roads"].length !== undefined) {
-					roads = fileAnwbJSON["data"]["roads"];
-				}
 				updateAvailableRoads(roads);
 
 				for (var i = 0; i < roads.length; i++) {
@@ -243,6 +333,7 @@ App {
 					for (var j = 0; j < segments.length; j++) {
 						var segment = segments[j];
 						var jams = segment["jams"];
+						var wegvak = (segment["start"] && segment["end"]) ? (segment["start"] + " - " + segment["end"]) : "";
 
 						if (jams) {
 
@@ -255,17 +346,17 @@ App {
 								} else {
 									length = 0;
 								}
-								if ((!fileinfoFilterEnabled) || (index !== -1)) {
-									registerRoadTile(msgWegNr, length);
-								}
 								delay = 0;
 								if (jam["delay"]) {
 									delay = parseInt(jam["delay"]);
 								}
-								if (index !== -1) {
-									fileinfoDataFiltered = fileinfoDataFiltered + jamXml(msgWegNr, jam, length, delay);
+								if ((!fileinfoFilterEnabled) || (index !== -1)) {
+									registerRoadTile(msgWegNr, length, delay, isRoadworksJam(jam));
 								}
-								fileinfoDataAll = fileinfoDataAll + jamXml(msgWegNr, jam, length, delay);
+								if (index !== -1) {
+									fileinfoDataFiltered = fileinfoDataFiltered + jamXml(msgWegNr, jam, length, delay, wegvak);
+								}
+								fileinfoDataAll = fileinfoDataAll + jamXml(msgWegNr, jam, length, delay, wegvak);
 							}
 						}
 					}
@@ -281,6 +372,7 @@ App {
 				} else {
 					fileinfoData = fileinfoDataAll;
 				}
+				fileinfoDataRead = true;
 				fileinfoUpdated();
 			}
 		}
@@ -294,7 +386,10 @@ App {
 
 		try {
 			var fileinfoSettingsJson = JSON.parse(fileinfoSettingsFile.read());
-			fileinfoFilterArray = fileinfoSettingsJson['roadFilter'];
+			if (fileinfoSettingsJson && typeof fileinfoSettingsJson['roadFilter'] === "string"
+					&& fileinfoSettingsJson['roadFilter'].length <= 8192) {
+				fileinfoFilterArray = fileinfoSettingsJson['roadFilter'];
+			}
 			if (fileinfoSettingsJson['filterEnabled'] == "Yes") {
 				fileinfoFilterEnabled = true
 			} else {

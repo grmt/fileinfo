@@ -7,11 +7,12 @@ Rectangle
 	height: 60
 	color: colors.canvas
 	property string kpiPrefix: "fileinfoFilterScreen."
+	property ControlGroup targetControlGroup
 
 	StyledButton {
 		id: filterButton
 
-		controlGroup: fileinfoFilterGroup
+		controlGroup: targetControlGroup
 
 		text: roadName
 		fontPixelSize: isNxt ? 19 : 15

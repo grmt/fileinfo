@@ -160,6 +160,8 @@ Screen {
 		query: "/meldingen/melding"
 		roles: ({
 			wegnr: "string",
+			wegvak: "string",
+			roadworks: "string",
 			oorzaak: "string",
 			gevolg: "string",
 			description: "string",

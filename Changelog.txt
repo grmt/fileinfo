@@ -1,3 +1,43 @@
+2.0.14
+- escaped traffic text in XML and disabled markup interpretation in traffic labels
+- validated traffic responses before updating the display; malformed responses now
+  report failure without replacing the previous traffic data
+
+2.0.13
+- fixed roadworks detection: incidentType "road-closed" also covers accidents, technical
+  problems, border checks and over-height vehicles - now checks the reason text for
+  "Wegwerkzaamheden" instead, which is accurate
+
+2.0.12
+- tile now supports up to 5 road entries instead of 3
+- a road with both a jam and roadworks now gets two separate tile entries instead of one
+  merged (and mislabeled) count
+- fixed singular/plural wording ("1 file" vs "2 files") instead of always "file(s)"
+- tile stats omit the "0 km, 0 min" suffix entirely when there's nothing to show (typical
+  for roadworks entries)
+
+2.0.11
+- redesigned the tile: smaller road badge (colored per A/N), jam/roadworks icon and stats
+  now follow it inline instead of one giant road name plus a floating icon
+- added total delay (minutes) to the tile stats
+
+2.0.10
+- fixed the A/N-wegen filter pages only showing a single column (missing right anchor)
+
+2.0.9
+- split the road filter screen into separate A-wegen and N-wegen pages, since the combined
+  list overflowed the screen width and made some roads unreachable
+- fixed the Clear button overlapping road filter buttons
+- jam icon now reuses the systray traffic icon instead of a plain dot
+
+2.0.8
+- fixed a crash when scrolling the traffic jam list caused by a too heavy jam/roadworks icon
+
+2.0.7
+- added the wegvak (road segment) to the traffic jam listing
+- added a jam/roadworks icon per traffic jam
+- colored the road number badge red for A-roads and yellow for N-roads
+
 2.0.6
 - switched traffic source to the ANWB routing incidents endpoint
 - updated the road filter to use the Rijkswaterstaat road list
