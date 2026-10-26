@@ -1,3 +1,8 @@
+2.0.15
+- keep known roads and cities in persistent settings, including existing selections
+- added a separate cities filter page and vertically scrollable filter grids
+- fixed individual N-road filters and kept city names out of the all-N-roads filter
+
 2.0.14
 - escaped traffic text in XML and disabled markup interpretation in traffic labels
 - validated traffic responses before updating the display; malformed responses now

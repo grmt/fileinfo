@@ -3,11 +3,14 @@ import BasicUIControls 1.0;
 
 Rectangle
 {
-	width: 106
+	property bool city: false
+	width: city ? (isNxt ? 230 : 184) : 106
 	height: 60
 	color: colors.canvas
 	property string kpiPrefix: "fileinfoFilterScreen."
 	property ControlGroup targetControlGroup
+	property ListModel targetModel
+	property int roadIndex: index
 
 	StyledButton {
 		id: filterButton
@@ -19,14 +22,20 @@ Rectangle
 		radius: 8
 		overlayColor: fontColor
 		height: isNxt ? 55 : 44
-		width: isNxt ? 97 : 78
+		width: city ? parent.width - 8 : (isNxt ? 97 : 78)
 
 		leftClickMargin: 14
 		rightClickMargin: 14
 		topClickMargin: 8
 		bottomClickMargin: 8
 
-		selected: false
+		selected: roadSelected
+		onSelectedChanged: {
+			if (targetModel && roadIndex >= 0 && roadIndex < targetModel.count
+					&& targetModel.get(roadIndex).roadSelected !== selected) {
+				targetModel.setProperty(roadIndex, "roadSelected", selected);
+			}
+		}
 		state: selected ? "selected" : "up"
 
 		selectionTrigger: "OnPress"

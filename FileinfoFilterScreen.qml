@@ -5,79 +5,56 @@ import qb.components 1.0
 Screen {
 	id: fileinfoFilterScreen
 
-	property variant defaultRoadArray : [
-		"A1", "A2", "A4", "A6", "A7", "A8", "A9", "A10", "A12", "A13",
-		"A15", "A16", "A17", "A18", "A20", "A22", "A27", "A28", "A29", "A30",
-		"A31", "A32", "A35", "A37", "A38", "A44", "A50", "A58", "A59", "A65",
-		"A67", "A73", "A74", "A76", "A77", "A79", "A200", "A325",
-		"N3", "N7", "N9", "N11", "N14", "N18", "N30", "N31", "N32", "N33",
-		"N35", "N36", "N44", "N46", "N48", "N50", "N57", "N59", "N61", "N65",
-		"N99", "N200", "N434", "N915",
-		"Alle\nN-wegen"
-	]
-
-	// index 0 = A-wegen page, 1 = N-wegen page
+	// Pages: A-wegen, N-wegen, Steden.
 	property int currentPage: 0
 	property variant aRoadsArray: []
 	property variant nRoadsArray: []
+	property variant citiesArray: []
 
 	function effectiveRoadArray() {
 		if (app.fileinfoAvailableRoads && app.fileinfoAvailableRoads.length > 0) {
 			return app.fileinfoAvailableRoads;
 		}
-		return defaultRoadArray;
+		return app.defaultRoadArray;
 	}
 
-	// Splits the combined road list into an A-wegen and an N-wegen array. Kept as
-	// two separate pages (rather than one long grid) because on-screen the combined
-	// list has too many columns to fit the display width - entries beyond the visible
-	// columns became unreachable, and the fixed Clear button could land on top of a
-	// road button.
+	// Match road numbers, so names such as Nijmegen and Amsterdam remain cities.
 	function splitRoads(roadArray) {
 		var a = [];
 		var n = [];
+		var cities = [];
 		for (var i = 0; i < roadArray.length; i++) {
 			var roadName = roadArray[i];
 			if (roadName === "Alle\nN-wegen") continue;
-			if (roadName.charAt(0) === "N") {
+			if (/^N[0-9]+$/.test(roadName)) {
 				n.push(roadName);
-			} else {
+			} else if (/^A[0-9]+$/.test(roadName)) {
 				a.push(roadName);
+			} else {
+				cities.push(roadName);
 			}
 		}
 		n.push("Alle\nN-wegen");
-		return {a: a, n: n};
+		return {a: a, n: n, cities: cities};
 	}
 
-	function restoreSelection(roadArray, group) {
-		var myFilter = app.fileinfoFilterArray;
-		var filterArr = myFilter.split(",");
-		var selectedIndexArr = [];
-
-		for (var i = 0; i < filterArr.length; i++) {
-			var index;
-			if (filterArr[i] == "N") {
-				index = roadArray.indexOf("Alle\nN-wegen");
-			}
-			else {
-				index = roadArray.indexOf(filterArr[i]);
-			}
-			if (index != -1) {
-				selectedIndexArr.push(index);
-			}
-		}
-
-		group.clearSelectedControls();
-		if (selectedIndexArr.length > 0) {
-			group.setSelectedControls(selectedIndexArr);
+	function populateRoadModel(model, roadArray) {
+		var selected = app.fileinfoFilterArray.split(",");
+		model.clear();
+		for (var i = 0; i < roadArray.length; i++) {
+			var name = roadArray[i];
+			var filterName = name === "Alle\nN-wegen" ? "N" : name;
+			model.append({roadName: name, roadSelected: selected.indexOf(filterName) !== -1});
 		}
 	}
 
-	function selectedRoadNames(roadArray, group) {
-		var selectedIndexArr = group.getSelectedControls();
+	// Store selections in the model, including buttons outside the visible viewport.
+	function selectedRoadNames(model) {
 		var names = [];
-		for (var i = 0; i < selectedIndexArr.length; i++) {
-			var roadName = roadArray[selectedIndexArr[i]];
+		for (var i = 0; i < model.count; i++) {
+			var road = model.get(i);
+			if (!road.roadSelected) continue;
+			var roadName = road.roadName;
 			if (roadName === "Alle\nN-wegen")
 				roadName = "N"; // Driver expects N instead of "Alle\nN-wegen"
 			names.push(roadName);
@@ -85,12 +62,19 @@ Screen {
 		return names;
 	}
 
+	function clearRoadSelection(model) {
+		for (var i = 0; i < model.count; i++) model.setProperty(i, "roadSelected", false);
+	}
+
 	function updatePageHeader() {
-		pageTitle.text = currentPage === 0 ? qsTr("A-wegen") : qsTr("N-wegen");
+		pageTitle.text = currentPage === 0 ? qsTr("A-wegen") :
+			(currentPage === 1 ? qsTr("N-wegen") : qsTr("Steden"));
 		fileinfoFilterGridViewA.visible = currentPage === 0;
 		fileinfoFilterGridViewN.visible = currentPage === 1;
+		fileinfoFilterGridViewCities.visible = currentPage === 2;
+		noCitiesText.visible = currentPage === 2 && citiesArray.length === 0;
 		leftArrow.enabled = currentPage > 0;
-		rightArrow.enabled = currentPage < 1;
+		rightArrow.enabled = currentPage < 2;
 	}
 
 	screenTitle: qsTr("Filter")
@@ -100,26 +84,22 @@ Screen {
 		var split = splitRoads(effectiveRoadArray());
 		aRoadsArray = split.a;
 		nRoadsArray = split.n;
+		citiesArray = split.cities;
 
-		fileinfoFilterModelA.clear();
-		for (var i = 0; i < aRoadsArray.length; i++) {
-			fileinfoFilterModelA.append({roadName: aRoadsArray[i]});
-		}
-		fileinfoFilterModelN.clear();
-		for (var j = 0; j < nRoadsArray.length; j++) {
-			fileinfoFilterModelN.append({roadName: nRoadsArray[j]});
-		}
-
-		restoreSelection(aRoadsArray, fileinfoFilterGroupA);
-		restoreSelection(nRoadsArray, fileinfoFilterGroupN);
+		populateRoadModel(fileinfoFilterModelA, aRoadsArray);
+		populateRoadModel(fileinfoFilterModelN, nRoadsArray);
+		populateRoadModel(fileinfoFilterModelCities, citiesArray);
+		fileinfoFilterGridViewA.positionViewAtBeginning();
+		fileinfoFilterGridViewN.positionViewAtBeginning();
+		fileinfoFilterGridViewCities.positionViewAtBeginning();
 
 		currentPage = 0;
 		updatePageHeader();
 	}
 
 	onSaved: {
-		var filterArr = selectedRoadNames(aRoadsArray, fileinfoFilterGroupA).concat(
-			selectedRoadNames(nRoadsArray, fileinfoFilterGroupN));
+		var filterArr = selectedRoadNames(fileinfoFilterModelA).concat(
+			selectedRoadNames(fileinfoFilterModelN), selectedRoadNames(fileinfoFilterModelCities));
 		var myFilterStr = filterArr.toString();
 		app.fileinfoFilterArray = myFilterStr;
 		app.saveSettings();
@@ -133,6 +113,11 @@ Screen {
 
 	ControlGroup {
 		id: fileinfoFilterGroupN
+		exclusive: false
+	}
+
+	ControlGroup {
+		id: fileinfoFilterGroupCities
 		exclusive: false
 	}
 
@@ -174,7 +159,7 @@ Screen {
 			anchors.verticalCenter: parent.verticalCenter
 			iconSource: "qrc:/tsc/navArrow-right.png"
 			onClicked: {
-				if (currentPage < 1) {
+				if (currentPage < 2) {
 					currentPage = currentPage + 1;
 					updatePageHeader();
 				}
@@ -186,12 +171,13 @@ Screen {
 		id: fileinfoFilterGridViewA
 
 		model: fileinfoFilterModelA
-		delegate: FileinfoFilterDelegate { targetControlGroup: fileinfoFilterGroupA }
+		delegate: FileinfoFilterDelegate { targetControlGroup: fileinfoFilterGroupA; targetModel: fileinfoFilterModelA }
 
-		flow: GridView.TopToBottom
+		flow: GridView.LeftToRight
 		cellWidth: isNxt ? 132 : 106
 		cellHeight: isNxt ? 75 : 60
 		interactive: true
+		clip: true
 		flickableDirection: Flickable.VerticalFlick
 
 		anchors {
@@ -209,12 +195,13 @@ Screen {
 		id: fileinfoFilterGridViewN
 
 		model: fileinfoFilterModelN
-		delegate: FileinfoFilterDelegate { targetControlGroup: fileinfoFilterGroupN }
+		delegate: FileinfoFilterDelegate { targetControlGroup: fileinfoFilterGroupN; targetModel: fileinfoFilterModelN }
 
-		flow: GridView.TopToBottom
+		flow: GridView.LeftToRight
 		cellWidth: isNxt ? 132 : 106
 		cellHeight: isNxt ? 75 : 60
 		interactive: true
+		clip: true
 		flickableDirection: Flickable.VerticalFlick
 
 		anchors {
@@ -230,6 +217,45 @@ Screen {
 
 	ListModel {
 		id: fileinfoFilterModelA
+	}
+
+	GridView {
+		id: fileinfoFilterGridViewCities
+		model: fileinfoFilterModelCities
+		delegate: FileinfoFilterDelegate {
+			targetControlGroup: fileinfoFilterGroupCities
+			targetModel: fileinfoFilterModelCities
+			city: true
+		}
+		flow: GridView.LeftToRight
+		cellWidth: isNxt ? 250 : 200
+		cellHeight: isNxt ? 75 : 60
+		interactive: true
+		clip: true
+		flickableDirection: Flickable.VerticalFlick
+		anchors {
+			top: pageHeader.bottom
+			bottom: parent.bottom
+			left: parent.left
+			right: parent.right
+			topMargin: isNxt ? 11 : 9
+			leftMargin: isNxt ? 58 : 46
+			rightMargin: (isNxt ? 132 : 106) + 12
+		}
+	}
+
+	Text {
+		id: noCitiesText
+		anchors.top: pageHeader.bottom
+		anchors.topMargin: 20
+		anchors.horizontalCenter: parent.horizontalCenter
+		text: qsTr("Nog geen steden ontvangen van ANWB.")
+		font.family: qfont.regular.name
+		font.pixelSize: isNxt ? 20 : 16
+	}
+
+	ListModel {
+		id: fileinfoFilterModelCities
 	}
 
 	ListModel {
@@ -261,8 +287,12 @@ Screen {
 			text: qsTr("Clear")
 
 			onPressed: {
+				clearRoadSelection(fileinfoFilterModelA);
+				clearRoadSelection(fileinfoFilterModelN);
+				clearRoadSelection(fileinfoFilterModelCities);
 				fileinfoFilterGroupA.clearSelectedControls();
 				fileinfoFilterGroupN.clearSelectedControls();
+				fileinfoFilterGroupCities.clearSelectedControls();
 			}
 		}
 	}

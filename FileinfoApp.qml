@@ -28,7 +28,16 @@ App {
 	// Fileinfo filter string and filter enabled indicator
 	property bool fileinfoFilterEnabled: false
 	property string fileinfoFilterArray
-	property variant fileinfoAvailableRoads: []
+	property variant defaultRoadArray: [
+		"A1", "A2", "A4", "A6", "A7", "A8", "A9", "A10", "A12", "A13",
+		"A15", "A16", "A17", "A18", "A20", "A22", "A27", "A28", "A29", "A30",
+		"A31", "A32", "A35", "A37", "A38", "A44", "A50", "A58", "A59", "A65",
+		"A67", "A73", "A74", "A76", "A77", "A79", "A200", "A325",
+		"N3", "N7", "N9", "N11", "N14", "N18", "N30", "N31", "N32", "N33",
+		"N35", "N36", "N44", "N46", "N48", "N50", "N57", "N59", "N61", "N65",
+		"N99", "N200", "N434", "N915"
+	]
+	property variant fileinfoAvailableRoads: defaultRoadArray
 
 	// Fileinfo data for Tile max 5 roads
 	property string roadTile1Name
@@ -102,7 +111,8 @@ App {
 
  		var tmpUserSettingsJson = {
 			"roadFilter": fileinfoFilterArray,
-			"filterEnabled": tmpfileinfoFilterEnabled 
+			"filterEnabled": tmpfileinfoFilterEnabled,
+			"knownRoads": fileinfoAvailableRoads
 		}
 
   		var doc3 = new XMLHttpRequest();
@@ -248,29 +258,46 @@ App {
 		return normalized;
 	}
 
+	// Keep defaults, saved selections and everything ever supplied by ANWB.
+	function rememberRoads(roadNames) {
+		var candidates = defaultRoadArray.concat(fileinfoAvailableRoads,
+			fileinfoFilterArray.split(","), roadNames);
+		var seen = {};
+		var known = [];
+		for (var i = 0; i < candidates.length; i++) {
+			var name = candidates[i];
+			if (typeof name !== "string" || !name || name.length > 4096
+					|| name === "N" || name === "Alle\nN-wegen" || seen["$" + name]) continue;
+			seen["$" + name] = true;
+			known.push(name);
+		}
+		known.sort();
+		if (JSON.stringify(known) === JSON.stringify(fileinfoAvailableRoads)) return false;
+		fileinfoAvailableRoads = known;
+		return true;
+	}
+
 	function updateAvailableRoads(roads) {
-		var availableRoads = {};
-		var seenRoads = [];
+		var names = [];
+		for (var i = 0; i < roads.length; i++) names.push(roads[i]["road"]);
+		// Avoid rewriting flash storage when a refresh discovers nothing new.
+		if (rememberRoads(names)) saveSettings();
+	}
 
-		for (var i = 0; i < roads.length; i++) {
-			var road = roads[i];
-			var roadName = road["road"];
-			if (!roadName || availableRoads[roadName]) {
-				continue;
-			}
-			availableRoads[roadName] = true;
-			seenRoads.push(roadName);
+	function loadSettings() {
+		var settings = {};
+		try {
+			var parsed = JSON.parse(fileinfoSettingsFile.read());
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) settings = parsed;
+		} catch (error) {
 		}
-
-		seenRoads.sort();
-
-		var roadOptions = [];
-		for (var j = 0; j < seenRoads.length; j++) {
-			roadOptions.push(seenRoads[j]);
+		if (typeof settings["roadFilter"] === "string" && settings["roadFilter"].length <= 8192) {
+			fileinfoFilterArray = settings["roadFilter"];
 		}
-		roadOptions.push("Alle\nN-wegen");
-
-		fileinfoAvailableRoads = roadOptions;
+		fileinfoFilterEnabled = settings["filterEnabled"] === "Yes";
+		rememberRoads(Array.isArray(settings["knownRoads"]) ? settings["knownRoads"] : []);
+		// Migrate older settings, including selections absent from today's feed.
+		if (JSON.stringify(settings["knownRoads"]) !== JSON.stringify(fileinfoAvailableRoads)) saveSettings();
 	}
 
 	function updateFileinfoInfo() {
@@ -307,7 +334,6 @@ App {
 				var length = 0;
 				var delay = 0;
 				var msgWegNr = "-";
-				var searchmsgWegNr = "-";
 				var myFilter = fileinfoFilterArray;
 				var filterArr = myFilter.split(",");
 
@@ -324,12 +350,8 @@ App {
 					}
 
 					msgWegNr = road["road"];
-					searchmsgWegNr = msgWegNr;
-						// 	lookup roadnr in filter array
-					if (msgWegNr.substring(0,1) == "N") {
-						searchmsgWegNr = "N"
-					}
-					var index = filterArr.indexOf(searchmsgWegNr);
+					var selected = filterArr.indexOf(msgWegNr) !== -1
+						|| (/^N[0-9]+$/.test(msgWegNr) && filterArr.indexOf("N") !== -1);
 					for (var j = 0; j < segments.length; j++) {
 						var segment = segments[j];
 						var jams = segment["jams"];
@@ -350,10 +372,10 @@ App {
 								if (jam["delay"]) {
 									delay = parseInt(jam["delay"]);
 								}
-								if ((!fileinfoFilterEnabled) || (index !== -1)) {
+								if ((!fileinfoFilterEnabled) || selected) {
 									registerRoadTile(msgWegNr, length, delay, isRoadworksJam(jam));
 								}
-								if (index !== -1) {
+								if (selected) {
 									fileinfoDataFiltered = fileinfoDataFiltered + jamXml(msgWegNr, jam, length, delay, wegvak);
 								}
 								fileinfoDataAll = fileinfoDataAll + jamXml(msgWegNr, jam, length, delay, wegvak);
@@ -384,19 +406,7 @@ App {
 
 			// read saved filter and start timer
 
-		try {
-			var fileinfoSettingsJson = JSON.parse(fileinfoSettingsFile.read());
-			if (fileinfoSettingsJson && typeof fileinfoSettingsJson['roadFilter'] === "string"
-					&& fileinfoSettingsJson['roadFilter'].length <= 8192) {
-				fileinfoFilterArray = fileinfoSettingsJson['roadFilter'];
-			}
-			if (fileinfoSettingsJson['filterEnabled'] == "Yes") {
-				fileinfoFilterEnabled = true
-			} else {
-				fileinfoFilterEnabled = false
-			}		
-		} catch(e) {
-		}
+		loadSettings();
 		datetimeTimerFiles.running = true;
 	}
 
